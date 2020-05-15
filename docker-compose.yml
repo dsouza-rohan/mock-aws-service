@@ -1,0 +1,73 @@
+version: '3'
+
+services:
+   elasticmq-sqs:
+     image: s12v/elasticmq:latest
+     container_name: elasticmq-sqs
+     ports:
+       - "9324:9324"
+     stdin_open: true
+     tty: true
+     volumes:
+       - "$PWD:/etc/elasticmq"
+     labels:
+       - 'traefik.backend=elasticmq'
+       - 'traefik.port=9324'
+       - 'traefik.frontend.rule=Host:elasticmq.${PROJECT_BASE_URL}'
+
+   elastic-search:
+     image: docker.elastic.co/elasticsearch/elasticsearch:7.6.2
+     container_name: elastic-search
+     environment:
+       - bootstrap.memory_lock=true
+       - discovery.type=single-node
+       - network.bind_host=0.0.0.0
+     ulimits:
+       memlock:
+         soft: -1
+         hard: -1
+     volumes:
+       - ./data/es/:/usr/share/elasticsearch/data
+     ports:
+       - 9200:9200
+     expose:
+       - 9200
+     
+     labels:
+       - 'traefik.backend=elastic-search'
+       - 'traefik.port=9200'
+       - 'traefik.frontend.rule=Host:${PROJECT_BASE_URL}'
+
+   dynamodb:
+     image: amazon/dynamodb-local
+     container_name: "dynamodb2"
+     command: -jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/
+     volumes:
+        #      - dynamodb_data:/home/dynamodblocal/data
+        - ./data/ddb/:/home/dynamodblocal/data
+     ports:
+       - "8000:8000"
+     labels:
+       - 'traefik.backend=dynamodb'
+       - 'traefik.port=8000'
+       - 'traefik.frontend.rule=Host:dynamodb.${PROJECT_BASE_URL}'
+
+   traefik:
+     image: traefik:1.7-alpine
+     container_name: "${PROJECT_NAME}_traefik"
+     command: -c /dev/null --web --docker --logLevel=INFO
+     ports:
+       - '8080:8080' # Dashboard
+     expose:
+       # traefik dashboard port
+       - 8080
+     volumes:
+       - /var/run/docker.sock:/var/run/docker.sock
+     labels:
+        traefik.enable: true
+        traefik.frontend.rule: "Host:traefik.${PROJECT_BASE_URL}"
+       # get md5 from htpasswd or http://www.htaccesstools.com/htpasswd-generator/
+       # and then double all $ to $$ to avoid docker-compose
+       # traefik.frontend.auth.basic: "username:passwordMD5"
+        traefik.port: 8080
+     restart: "always"
